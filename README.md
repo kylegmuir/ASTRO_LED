@@ -139,11 +139,35 @@ ledController.setFade();
 ledController.setSmooth();
 ```
 
+## How It Works (Technical Details)
+
+The `ledControl.aar` library communicates with the RK3288 through a kernel sysfs interface:
+
+```
+Application Code (Java)
+    ↓
+LedController.aar (thin wrapper)
+    ↓
+/sys/devices/platform/led_con_h/zigbee_reset (sysfs device file)
+    ↓
+RK3288 Kernel LED Driver
+    ↓
+GPIO/PWM Hardware Control
+```
+
+**Key points:**
+- The library relies on a custom RK3288 kernel module
+- No external hardware controller or vendor dependency
+- Commands are sent as hex values to a kernel device file
+- Root access is automatically handled by the library
+- All state changes are applied to the hardware immediately
+
 ## Hardware Requirements
 
 - ASTRO perimeter device with RK3288 chipset
 - Android OS (minimum version per your application)
 - LED hardware properly configured on device
+- Kernel module `led_con_h` compiled and loaded into the RK3288 kernel
 
 ## Documentation
 
@@ -158,12 +182,33 @@ See `LibrarySetup.docx` for detailed installation and integration steps.
 - Released: May 17, 2021
 - Library Version: 1.0
 
-## Notes
+## Important Notes
 
-- This is a compiled `.aar` library; source code is not included
-- The library handles low-level communication with the RK3288 LED driver
-- All color and effect changes are applied immediately
-- State queries (getLEDColor, getLEDState) return current hardware state
+- **Compiled library** — Source code is not included; only the `.aar` binary is provided
+- **Kernel-dependent** — Requires the RK3288 LED kernel driver to be present and functional
+- **Immediate execution** — All color and effect changes are applied immediately to hardware
+- **State persistence** — getLEDColor() and getLEDState() return the current hardware state
+- **Root requirement** — The library internally uses root (`su`) to write to kernel device files
+- **Brightness controls** — The Cordova plugin exposes brightnessUp/brightnessDown (0x00, 0x01), but these are not exposed in the native `.aar` class; use the Cordova plugin if brightness control is needed
+- **No effect parameters** — Effects (fade, smooth, strobe, flash) run with fixed timing; timing is not configurable via the library
+
+## Troubleshooting
+
+### LEDs Not Responding
+- Verify the RK3288 kernel module is loaded: `lsmod | grep led` (on device shell)
+- Check if `/sys/devices/platform/led_con_h/zigbee_reset` exists (on device shell)
+- Ensure the app has root access via `su` command
+- Verify LED hardware is properly connected to the RK3288 board
+
+### Effects Not Working
+- Some effects may have hardware-dependent timing
+- Test with basic on/off commands first, then try effects
+- Brightness-related effects may depend on PWM availability
+
+### Compatibility Issues
+- This library is specific to RK3288 and the ASTRO LED driver
+- It will not work on other Android devices without the matching kernel driver
+- For other Rockchip SoCs (RK3566, RK3588, etc.), a separate driver and potentially a recompiled `.aar` is required
 
 ## License
 
@@ -171,8 +216,22 @@ See `LibrarySetup.docx` for detailed installation and integration steps.
 
 ## Support
 
-For integration questions or issues, refer to the Cordova plugin examples in:
-- `kylegmuir/Cordova-LED-Plugin`
-- `kylegmuir/Cordova-LED-Example`
+### For Integration Help
+Refer to the Cordova plugin repositories for real-world usage examples:
+- [`kylegmuir/Cordova-LED-Plugin`](https://github.com/kylegmuir/Cordova-LED-Plugin) — Full plugin implementation
+- [`kylegmuir/Cordova-LED-Example`](https://github.com/kylegmuir/Cordova-LED-Example) — Example app using the plugin
 
-These repositories demonstrate real-world usage patterns.
+These demonstrate how to properly initialize, set colors, and apply effects.
+
+### For Hardware/Driver Issues
+Contact the ASTRO device vendor or Rockchip support:
+- Confirm the LED kernel driver is included in your RK3288 board image
+- Request the driver source if you need to modify or port it to another platform
+- Verify GPIO/PWM pin assignments if implementing custom LED hardware
+
+### For Third-Party Integration
+If you're integrating this into an external app:
+1. Verify you're running on an ASTRO device with the matching LED driver
+2. Use the Cordova plugin wrapper if building a cross-platform app
+3. Use the native `.aar` only if building an app that runs on the ASTRO device itself
+4. See the migration guide (in PowerBx Drive) if considering hardware upgrades (e.g., RK3288 → RK3566)
